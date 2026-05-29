@@ -26,6 +26,65 @@ You are an expert X-ray diffraction analyst. Your job is to parse XRD data, perf
 background subtraction and peak finding, then match peaks against **user-confirmed**
 reference phases. You never guess phases.
 
+---
+
+## IRON RULE — Figure Format Specification (READ BEFORE WRITING ANY PLOTTING CODE)
+
+**Every XRD figure you produce MUST follow this exact spec. No deviation. No "improvisation."
+No "Nature-style" from a different skill. This is the single source of truth.**
+
+### Layout
+1. **Two subplots**, sharex, hspace=0
+2. Height ratio: top ≈0.62, bottom ≈0.38 (card box is compact)
+3. **Axis box frames** on both subplots — all 4 spines visible per panel, 0.4pt `#333333`
+   - The axes themselves form the "方框". Do NOT add a separate outer rectangle
+
+### Top panel — XRD Curve
+4. No y-axis ticks or tick labels (`labelleft=False, left=False`)
+5. All 4 spines visible (box frame), 0.4pt `#333333`
+6. y-label: `Intensity (a.u.)`, fontsize=7
+7. Sample label: text at upper-left of plot (not legend box), e.g.
+   `r'$\mathregular{Sn_{2}S_{3}}$ bulk piece'`
+
+### Bottom panel — Standard Card Box
+8. All 4 spines visible (box frame), 0.4pt `#333333` — same as top panel
+9. Card bottom edge = x-axis spine (ylim bottom = 0), no gap
+10. No y-axis ticks/labels on card panel
+11. **Card box height** = 54 data units (compact); adjust `figsize` height accordingly
+
+### Stick patterns
+12. **All stick heights / 2** (relative intensity values halved for compact display)
+13. Sticks rooted at card floor or divider line, no (hkl) labels
+14. **Multi-phase**: divide card vertically with a solid gray line (`#bbbbbb`, 0.5pt)
+15. Phase labels at top of each section with PDF#, e.g.:
+    - `r"$\mathregular{Sn_{2}S_{3}}$ PDF#27-0899"`
+
+### Typography
+16. Arial / DejaVu Sans, 5-7pt throughout
+17. Chemical formulas via mathtext: `$\mathregular{Sn_{2}S_{3}}$` (handles Unicode subscripts)
+
+### rcParams (MUST set before any plotting)
+```python
+plt.rcParams.update({
+    'font.family': 'sans-serif',
+    'font.sans-serif': ['Arial', 'DejaVu Sans'],
+    'svg.fonttype': 'none',
+    'font.size': 7,
+    'axes.linewidth': 0.4,
+    'xtick.major.width': 0.4,
+    'ytick.major.width': 0.4,
+})
+```
+
+### Save
+```python
+fig.savefig("name.svg", bbox_inches='tight', dpi=300, facecolor='white')
+fig.savefig("name.png", bbox_inches='tight', dpi=300, facecolor='white')
+plt.close(fig)
+```
+
+---
+
 ## Trigger
 
 User invokes `/xrd-skill` or mentions XRD analysis:
@@ -69,22 +128,30 @@ Also triggers on: "XRD", "xrd分析", "衍射", "物相鉴定", "寻峰"
 - Phase match results with per-peak matching details
 - Overall interpretation
 
-### Figure Format Specification
-When calling `/nature-figure` to plot the XRD, enforce these rules:
-1. **Two subplots**, sharex, hspace=0
-2. **Top**: XRD curve, no spines/ticks/labels, y-label `Intensity (a.u.)`
-3. **Bottom**: card box (y=0~100), x-axis below with `2θ (deg)`
-4. **Sticks**: bottom at card floor, extending up, (hkl) labels above each stick
-5. **Card title**: `$\mathrm{Cu(OH)_2}$ PDF#13-0420` at top of card box
-6. **Legend**: inside top plot, upper right corner
-7. **Outer frame**: single rectangle enclosing both subplots, 0.5pt
-8. **Typography**: Arial 5-7pt, subscripts via mathtext `$\mathrm{}$`, consistent
+### Step 6: Plotting — BLOCKING re-read + compliance gate
 
-### Notion (if applicable)
-- Check user's Notion memory for the relevant experiment database
-- Update XRD-related fields (e.g., "非晶度", "备注/XRD附件")
+**Before writing ANY plotting code, you MUST:**
 
-### Step 6: Notion Integration (if applicable)
+1. **Re-read the IRON RULE** section at the top of this file (lines 31–84). Do this every time,
+   even if you think you remember it. Read it fresh.
+
+2. **Write the plotting script**, matching every rule exactly — spine visibility, frame color,
+   font size, label positions, stick heights, card box height, everything.
+
+3. **Self-audit against the 17 rules** before running the script. For each rule, confirm:
+   - Rule 1 (two subplots sharex hspace=0)? Yes/No
+   - Rule 2 (height ratio 0.62/0.38)? Yes/No
+   - Rule 3 (axis box frames, NO outer rectangle)? Yes/No
+   - Rules 4-7 (top panel)? Yes/No
+   - Rules 8-11 (bottom panel)? Yes/No
+   - Rules 12-15 (stick patterns)? Yes/No
+   - Rules 16-17 (typography)? Yes/No
+
+4. **Only after all 17 rules pass**, execute the script and save SVG + PNG.
+
+5. If any rule fails, fix the code and re-audit. Do not proceed with a failing audit.
+
+### Step 7: Notion Integration (if applicable)
 - Check user's Notion memory for the relevant experiment database
 - Update XRD-related fields (e.g., "非晶度", "备注/XRD附件")
 - Include the analysis summary and figure path

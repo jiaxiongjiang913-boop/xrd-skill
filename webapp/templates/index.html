@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>XRD 交互式分析工具</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:Arial,'Microsoft YaHei',sans-serif;background:#f5f5f5;color:#333}
+.header{background:#1a1a2e;color:#fff;padding:10px 20px;font-size:17px;font-weight:700}
+.header span{font-weight:400;font-size:12px;opacity:.7;margin-left:12px}
+.container{display:flex;height:calc(100vh - 42px)}
+.panel-left{width:300px;min-width:260px;background:#fff;border-right:1px solid #ddd;padding:10px;overflow-y:auto}
+.panel-right{flex:1;display:flex;align-items:center;justify-content:center;min-width:0;position:relative;background:#fff}
+.upload-zone{border:2px dashed #bbb;border-radius:8px;padding:14px;text-align:center;cursor:pointer;margin-bottom:8px;transition:all .2s}
+.upload-zone:hover,.upload-zone.dragover{border-color:#457b9d;background:#f0f4f8}
+.upload-zone p{font-size:13px;color:#666}.upload-zone .sub{font-size:11px;color:#999;margin-top:2px}
+.uploaded-file{font-size:12px;color:#457b9d;margin-bottom:6px;display:none}
+.meta-box{background:#f8f9fa;border-radius:6px;padding:6px 8px;margin-bottom:8px;font-size:10px;line-height:1.5;display:none}
+.section{margin-bottom:7px}
+.section-title{font-size:12px;font-weight:700;color:#1a1a2e;border-bottom:1px solid #eee;padding-bottom:2px;margin-bottom:4px;display:flex;align-items:center;gap:5px}
+.section-title .dot{width:6px;height:6px;border-radius:50%;flex-shrink:0}
+.ctrl-row{display:flex;align-items:center;justify-content:space-between;font-size:11px;padding:2px 0;gap:4px}
+.ctrl-row label{color:#555;flex-shrink:0}
+.ctrl-row input[type=range]{width:95px;accent-color:#457b9d}
+.ctrl-row input[type=checkbox]{accent-color:#457b9d;width:15px;height:15px}
+.ctrl-row select{font-size:10px;padding:1px 3px;border:1px solid #ccc;border-radius:3px}
+.ctrl-val{font-size:10px;color:#457b9d;min-width:22px;text-align:right;font-weight:700}
+.phase-list{max-height:150px;overflow-y:auto}
+.phase-item{display:flex;align-items:center;gap:5px;font-size:11px;padding:1px 0;cursor:pointer}
+.phase-item input{accent-color:#457b9d}
+.phase-dot{width:7px;height:7px;border-radius:2px;flex-shrink:0}
+.btn-row{display:flex;gap:5px;margin-top:6px}
+.btn{padding:5px 12px;border:none;border-radius:4px;font-size:11px;cursor:pointer}
+.btn:hover{opacity:.85}
+.btn-primary{background:#457b9d;color:#fff}
+.btn-outline{background:#fff;color:#457b9d;border:1px solid #457b9d}
+#plotImage{max-width:100%;max-height:100%;object-fit:contain}
+.placeholder{color:#bbb;font-size:14px;position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);pointer-events:none}
+.table-area{border-top:1px solid #ddd;padding:6px 10px;max-height:150px;overflow-y:auto;display:none}
+.table-area table{width:100%;border-collapse:collapse;font-size:10px}
+.table-area th{background:#f0f4f8;padding:3px 5px;text-align:center;border-bottom:1px solid #ddd;position:sticky;top:0}
+.table-area td{padding:2px 5px;text-align:center;border-bottom:1px solid #f0f0f0}
+.match-ok{color:#2a9d8f;font-weight:700}.match-no{color:#e76f51}
+@media(max-width:750px){.container{flex-direction:column}.panel-left{width:100%;max-height:40vh}}
+</style>
+</head>
+<body>
+<div class="header">XRD 交互式分析工具<span>上传 → 出图 → 实时调控</span></div>
+<div class="container">
+<div class="panel-left">
+  <div class="upload-zone" id="uploadZone"><p>📁 点击上传或拖拽 XRD 文件</p><p class="sub">Rigaku .asc / 两列 .txt</p></div>
+  <input type="file" id="fileInput" accept=".asc,.txt,.dat,.xy" style="display:none">
+  <div class="uploaded-file" id="uploadedFile"></div>
+  <div class="meta-box" id="metaBox"></div>
+
+  <div class="section"><div class="section-title"><span class="dot" style="background:#1a1a2e"></span>曲线参数</div>
+    <div class="ctrl-row"><label>背景扣除</label><input type="checkbox" id="bgSubtract" onchange="update()"></div>
+    <div class="ctrl-row"><label>多项式阶数</label><input type="range" id="polyDeg" min="2" max="8" value="4" step="1" oninput="sv('polyDegVal',this);update()"><span class="ctrl-val" id="polyDegVal">4</span></div>
+    <div class="ctrl-row"><label>寻峰 σ阈值</label><input type="range" id="sigmaThresh" min="1" max="5" value="2" step="0.1" oninput="sv('sigmaVal',this);update()"><span class="ctrl-val" id="sigmaVal">2.0</span></div>
+    <div class="ctrl-row"><label>最小 SNR</label><input type="range" id="minSnr" min="0.5" max="5" value="1.5" step="0.1" oninput="sv('snrVal',this);update()"><span class="ctrl-val" id="snrVal">1.5</span></div>
+    <div class="ctrl-row"><label>Y轴刻度</label><input type="checkbox" id="yTicks" onchange="update()"></div>
+  </div>
+
+  <div class="section"><div class="section-title"><span class="dot" style="background:#e63946"></span>卡片参数</div>
+    <div class="ctrl-row"><label>框高度</label><input type="range" id="cardHeight" min="20" max="120" value="54" step="2" oninput="sv('cardHVal',this);update()"><span class="ctrl-val" id="cardHVal">54</span></div>
+    <div class="ctrl-row"><label>棒图缩放</label><input type="range" id="stickScale" min="0.1" max="1.5" value="0.5" step="0.05" oninput="sv('stickVal',this);update()"><span class="ctrl-val" id="stickVal">0.50</span></div>
+    <div class="ctrl-row"><label>hkl标注</label><input type="checkbox" id="showHkl" onchange="update()"></div>
+    <div class="ctrl-row"><label>卡片填充</label><input type="checkbox" id="cardFill" onchange="update()"></div>
+    <div class="ctrl-row"><label>分隔线</label><select id="dividerStyle" onchange="update()"><option value="solid" selected>实线</option><option value="dot">点线</option><option value="dash">虚线</option><option value="none">无</option></select></div>
+  </div>
+
+  <div class="section"><div class="section-title"><span class="dot" style="background:#2a9d8f"></span>物相选择</div><div class="phase-list" id="phaseList"></div></div>
+
+  <div class="btn-row">
+    <button class="btn btn-primary" onclick="downloadImg()">下载 PNG</button>
+  </div>
+</div>
+
+<div class="panel-right">
+  <img id="plotImage" style="display:none" alt="XRD Plot">
+  <div class="placeholder" id="placeholder">← 上传 XRD 文件即可出图</div>
+</div>
+</div>
+
+<div class="table-area" id="tableArea" style="position:fixed;bottom:0;left:300px;right:0;background:#fff;z-index:10">
+  <div style="display:flex;gap:16px">
+    <div style="flex:1"><b style="font-size:12px">寻峰</b><span id="peakCount" style="font-size:10px;color:#888"></span>
+      <table id="peakTable"><thead><tr><th>#</th><th>2θ(°)</th><th>d(Å)</th><th>FWHM(°)</th><th>SNR</th></tr></thead><tbody></tbody></table></div>
+    <div style="flex:1"><b style="font-size:12px">物相匹配</b><div id="phaseMatchInfo" style="font-size:10px;margin-top:3px"></div></div>
+  </div>
+</div>
+
+<script>
+const PCOLORS=['#457b9d','#e63946','#2a9d8f','#e76f51','#264653','#f4a261','#a8dadc','#6d597a'];
+let sid=null,timer=null;
+function sv(id,el){document.getElementById(id).textContent=el.value}
+
+function update(){if(!sid)return;clearTimeout(timer);timer=setTimeout(doUpdate,150)}
+function doUpdate(){
+  const p={
+    bgSubtract:document.getElementById('bgSubtract').checked,
+    polyDeg:+document.getElementById('polyDeg').value,
+    sigmaThresh:+document.getElementById('sigmaThresh').value,
+    minSnr:+document.getElementById('minSnr').value,
+    cardHeight:+document.getElementById('cardHeight').value,
+    stickScale:+document.getElementById('stickScale').value,
+    cardFill:document.getElementById('cardFill').checked,
+    dividerStyle:document.getElementById('dividerStyle').value,
+    yTicks:document.getElementById('yTicks').checked,
+    phases:Array.from(document.querySelectorAll('#phaseList input:checked')).map(c=>c.value)
+  };
+  fetch('/api/analyze',{method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({session_id:sid,params:p})})
+  .then(r=>r.json()).then(d=>{
+    if(d.error){alert(d.error);return}
+    const img=document.getElementById('plotImage');
+    img.src='data:image/png;base64,'+d.image;
+    img.style.display='block';
+    document.getElementById('placeholder').style.display='none';
+    document.getElementById('tableArea').style.display='block';
+    document.getElementById('peakCount').textContent=' ('+d.n_peaks+'峰)';
+    document.querySelector('#peakTable tbody').innerHTML=(d.peaks||[]).map((p,i)=>
+      '<tr><td>'+(i+1)+'</td><td>'+p.pos+'</td><td>'+p.d+'</td><td>'+p.fwhm+'</td><td>'+p.snr+'</td></tr>').join('');
+    document.getElementById('phaseMatchInfo').innerHTML=(d.phase_matches||[]).map(m=>
+      '<div style="margin-bottom:3px"><span class="'+(m.ratio>=50?'match-ok':'match-no')+'">'+
+      (m.ratio>=50?'✓':m.ratio>=20?'△':'✗')+' '+m.name+': '+m.matched+'/'+m.total+
+      ' ('+m.ratio+'%)</span></div>').join('')
+  }).catch(err=>console.error(err))
+}
+
+function downloadImg(){
+  const img=document.getElementById('plotImage');
+  if(!img.src||img.src===''){alert('请先上传数据');return}
+  const a=document.createElement('a');a.href=img.src;a.download='xrd_plot.png';a.click()
+}
+
+window.addEventListener('DOMContentLoaded',function(){
+  fetch('/api/phases').then(r=>r.json()).then(phases=>{
+    document.getElementById('phaseList').innerHTML=phases.map((p,i)=>
+      '<label class="phase-item"><input type="checkbox" value="'+p+'" '+(i<2?'checked':'')+' onchange="update()"><span class="phase-dot" style="background:'+PCOLORS[i%PCOLORS.length]+'"></span>'+p+'</label>').join('')
+  });
+  const zone=document.getElementById('uploadZone'),fi=document.getElementById('fileInput');
+  zone.addEventListener('click',()=>fi.click());
+  zone.addEventListener('dragover',e=>{e.preventDefault();zone.classList.add('dragover')});
+  zone.addEventListener('dragleave',()=>zone.classList.remove('dragover'));
+  zone.addEventListener('drop',e=>{e.preventDefault();zone.classList.remove('dragover');if(e.dataTransfer.files.length)upload(e.dataTransfer.files[0])});
+  fi.addEventListener('change',function(){if(this.files.length)upload(this.files[0])})
+});
+
+function upload(file){
+  const fd=new FormData();fd.append('file',file);
+  document.getElementById('uploadedFile').style.display='block';
+  document.getElementById('uploadedFile').textContent='上传中...';
+  fetch('/api/upload',{method:'POST',body:fd}).then(r=>r.json()).then(d=>{
+    if(d.error){alert(d.error);return}
+    sid=d.session_id;
+    document.getElementById('uploadedFile').textContent='✓ '+d.fname;
+    document.getElementById('metaBox').style.display='block';
+    document.getElementById('metaBox').innerHTML='<b>扫描:</b> '+d.scan_range+' · '+d.n_points+'点<br><b>强度:</b> '+d.i_range+' counts';
+    update()
+  }).catch(e=>alert('上传失败: '+e))
+}
+</script>
+</body>
+</html>
